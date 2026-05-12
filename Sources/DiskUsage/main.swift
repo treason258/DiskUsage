@@ -91,6 +91,7 @@ struct LoadingState {
     let title: String
     let detail: String
     let fraction: Double
+    let showsProgress: Bool
 }
 
 actor DiskScanner {
@@ -317,6 +318,8 @@ final class MainWindowController: NSWindowController {
     private var sortMode: SortMode = .size
     private var scanTask: Task<Void, Never>?
     private var scanGeneration = 0
+    private var isScanning = false
+    private let sidebarDefaultWidth: CGFloat = 280
 
     private var selectedURL: URL? {
         browser.selectedURL ?? sidebar.selectedLocation?.url
@@ -330,7 +333,7 @@ final class MainWindowController: NSWindowController {
             defer: false
         )
         super.init(window: window)
-        window.title = "DiskWave2"
+        window.title = "DiskUsage"
         window.minSize = NSSize(width: 900, height: 520)
         window.toolbar = makeToolbar()
         window.titleVisibility = .visible
@@ -356,8 +359,8 @@ final class MainWindowController: NSWindowController {
         split.dividerStyle = .thin
 
         let sidebarView = sidebar.view
-        sidebarView.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
-        sidebarView.widthAnchor.constraint(lessThanOrEqualToConstant: 360).isActive = true
+        sidebarView.widthAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
+        sidebarView.widthAnchor.constraint(lessThanOrEqualToConstant: 300).isActive = true
 
         let mainStack = NSStackView()
         mainStack.orientation = .vertical
@@ -387,6 +390,10 @@ final class MainWindowController: NSWindowController {
         split.addArrangedSubview(sidebarView)
         split.addArrangedSubview(mainStack)
         contentView.addSubview(split)
+        let initialSidebarWidth = sidebarDefaultWidth
+        DispatchQueue.main.async { [weak split] in
+            split?.setPosition(initialSidebarWidth, ofDividerAt: 0)
+        }
 
         NSLayoutConstraint.activate([
             split.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
@@ -407,25 +414,29 @@ final class MainWindowController: NSWindowController {
         browser.onSelectionChanged = { [weak self] url in
             self?.pathControl.url = url
         }
+        browser.onCancelScan = { [weak self] in
+            self?.cancelCurrentScan(resetLoading: true)
+        }
     }
 
     private func loadLocations() {
         sidebar.locations = LocationProvider.locations()
-        if let first = sidebar.locations.first {
-            sidebar.select(location: first)
-            openRoot(first.url)
-        }
+        browser.showPlaceholder(
+            title: "Choose a folder or volume",
+            detail: "Select a location on the left, or use Open, to start scanning."
+        )
+        statusLabel.stringValue = "Ready"
     }
 
     private func openRoot(_ url: URL) {
-        scanTask?.cancel()
+        cancelCurrentScan(resetLoading: false)
         pathControl.url = url
         browser.reset(root: url)
         loadColumn(for: url, after: -1)
     }
 
     private func refresh(url: URL? = nil) {
-        scanTask?.cancel()
+        cancelCurrentScan(resetLoading: false)
         if let url {
             if url == sidebar.selectedLocation?.url {
                 pathControl.url = url
@@ -443,9 +454,11 @@ final class MainWindowController: NSWindowController {
     }
 
     private func loadColumn(for url: URL, after column: Int, force: Bool = false) {
-        scanTask?.cancel()
+        cancelCurrentScan(resetLoading: false)
         scanGeneration += 1
         let generation = scanGeneration
+        isScanning = true
+        window?.toolbar?.validateVisibleItems()
         statusLabel.stringValue = force ? "Refreshing \(url.path)" : "Scanning \(url.path)"
         browser.showLoading(after: column, title: force ? "Refreshing..." : "Scanning...", detail: url.path, fraction: 0)
         scanTask = Task { [weak self] in
@@ -466,20 +479,44 @@ final class MainWindowController: NSWindowController {
                 let sorted = self.sorted(result.items)
                 await MainActor.run {
                     guard self.scanGeneration == generation else { return }
+                    self.isScanning = false
                     self.browser.set(items: sorted, for: url, after: column)
                     let source = result.fromCache ? "Loaded from cache" : "Scan complete"
                     self.statusLabel.stringValue = "\(source): \(sorted.count) items, \(Self.formatSize(sorted.reduce(0) { $0 + $1.size }))"
+                    self.window?.toolbar?.validateVisibleItems()
                 }
             } catch is CancellationError {
+                await MainActor.run {
+                    guard self.scanGeneration == generation else { return }
+                    self.isScanning = false
+                    self.browser.showCancelled(after: column)
+                    self.statusLabel.stringValue = "Scan cancelled"
+                    self.window?.toolbar?.validateVisibleItems()
+                }
                 return
             } catch {
                 await MainActor.run {
                     guard self.scanGeneration == generation else { return }
+                    self.isScanning = false
                     self.browser.showError(after: column, message: error.localizedDescription)
                     self.statusLabel.stringValue = "Scan failed"
+                    self.window?.toolbar?.validateVisibleItems()
                 }
             }
         }
+    }
+
+    private func cancelCurrentScan(resetLoading: Bool) {
+        guard scanTask != nil || isScanning else { return }
+        scanTask?.cancel()
+        scanTask = nil
+        scanGeneration += 1
+        isScanning = false
+        if resetLoading {
+            browser.showCancelled()
+            statusLabel.stringValue = "Scan cancelled"
+        }
+        window?.toolbar?.validateVisibleItems()
     }
 
     private func sorted(_ items: [FileItem]) -> [FileItem] {
@@ -502,7 +539,7 @@ final class MainWindowController: NSWindowController {
     }
 
     private func makeToolbar() -> NSToolbar {
-        let toolbar = NSToolbar(identifier: "DiskWave2.Toolbar")
+        let toolbar = NSToolbar(identifier: "DiskUsage.Toolbar")
         toolbar.displayMode = .iconAndLabel
         toolbar.allowsUserCustomization = true
         toolbar.delegate = self
@@ -515,7 +552,7 @@ final class MainWindowController: NSWindowController {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.prompt = "Scan"
-        panel.message = "Choose a folder or volume to scan. DiskWave2 can see protected areas only after macOS grants permission."
+        panel.message = "Choose a folder or volume to scan. DiskUsage can see protected areas only after macOS grants permission."
         if panel.runModal() == .OK, let url = panel.url {
             let item = LocationItem(url: url, title: url.lastPathComponent.isEmpty ? url.path : url.lastPathComponent, subtitle: url.path, icon: NSWorkspace.shared.icon(forFile: url.path), isVolume: false)
             sidebar.addCustomLocation(item)
@@ -559,9 +596,13 @@ final class MainWindowController: NSWindowController {
         browser.resortVisible(using: sorted)
     }
 
+    @objc private func cancelScan() {
+        cancelCurrentScan(resetLoading: true)
+    }
+
     private func showError(_ message: String) {
         let alert = NSAlert()
-        alert.messageText = "DiskWave2"
+        alert.messageText = "DiskUsage"
         alert.informativeText = message
         alert.alertStyle = .warning
         alert.runModal()
@@ -598,7 +639,7 @@ extension MainWindowController: NSToolbarDelegate {
         case .quickLook:
             return toolbarItem(itemIdentifier, label: "Quick Look", image: NSImage(systemSymbolName: "eye", accessibilityDescription: nil), action: #selector(quickLookSelected))
         case .reveal:
-            return toolbarItem(itemIdentifier, label: "Reveal", image: NSImage(systemSymbolName: "finder", accessibilityDescription: nil), action: #selector(revealSelected))
+            return toolbarItem(itemIdentifier, label: "Reveal", image: NSWorkspace.shared.icon(forFile: "/System/Library/CoreServices/Finder.app"), action: #selector(revealSelected))
         case .sort:
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 160, height: 32), pullsDown: false)
@@ -606,7 +647,8 @@ extension MainWindowController: NSToolbarDelegate {
             popup.selectItem(at: SortMode.allCases.firstIndex(of: sortMode) ?? 0)
             popup.target = self
             popup.action = #selector(sortChanged)
-            item.label = "Sort Order"
+            item.label = ""
+            item.paletteLabel = "Sort Order"
             item.view = popup
             return item
         default:
@@ -640,12 +682,12 @@ extension MainWindowController: QLPreviewPanelDataSource {
 }
 
 extension NSToolbarItem.Identifier {
-    static let openFolder = NSToolbarItem.Identifier("DiskWave2.OpenFolder")
-    static let refreshAll = NSToolbarItem.Identifier("DiskWave2.Refresh")
-    static let trash = NSToolbarItem.Identifier("DiskWave2.Trash")
-    static let quickLook = NSToolbarItem.Identifier("DiskWave2.QuickLook")
-    static let reveal = NSToolbarItem.Identifier("DiskWave2.Reveal")
-    static let sort = NSToolbarItem.Identifier("DiskWave2.Sort")
+    static let openFolder = NSToolbarItem.Identifier("DiskUsage.OpenFolder")
+    static let refreshAll = NSToolbarItem.Identifier("DiskUsage.Refresh")
+    static let trash = NSToolbarItem.Identifier("DiskUsage.Trash")
+    static let quickLook = NSToolbarItem.Identifier("DiskUsage.QuickLook")
+    static let reveal = NSToolbarItem.Identifier("DiskUsage.Reveal")
+    static let sort = NSToolbarItem.Identifier("DiskUsage.Sort")
 }
 
 final class SidebarController: NSObject, NSTableViewDataSource, NSTableViewDelegate {
@@ -810,14 +852,16 @@ final class SidebarCell: NSTableCellView {
 }
 
 final class BrowserController: NSObject {
+    private let columnWidth: CGFloat = 360
     let view = NSScrollView()
     var onSelectDirectory: ((URL, Int, Bool) -> Void)?
     var onSelectionChanged: ((URL) -> Void)?
+    var onCancelScan: (() -> Void)?
     var selectedURL: URL? {
         columns.compactMap { $0.selectedItem?.url }.last
     }
 
-    private let stack = NSStackView()
+    private let documentView = ColumnDocumentView()
     private var columns: [FileColumnController] = []
 
     override init() {
@@ -830,14 +874,18 @@ final class BrowserController: NSObject {
         view.hasHorizontalScroller = true
         view.hasVerticalScroller = false
         view.autohidesScrollers = false
+        view.usesPredominantAxisScrolling = false
         view.borderType = .noBorder
         view.drawsBackground = false
 
-        stack.orientation = .horizontal
-        stack.alignment = .top
-        stack.spacing = 0
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        view.documentView = stack
+        documentView.frame = NSRect(origin: .zero, size: NSSize(width: columnWidth, height: 1))
+        view.documentView = documentView
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(contentViewBoundsDidChange),
+            name: NSView.boundsDidChangeNotification,
+            object: view.contentView
+        )
     }
 
     func reset(root: URL) {
@@ -845,29 +893,55 @@ final class BrowserController: NSObject {
         columns.removeAll()
     }
 
+    func showPlaceholder(title: String, detail: String) {
+        columns.forEach { $0.view.removeFromSuperview() }
+        columns.removeAll()
+        let placeholder = FileColumnController(url: nil, items: [])
+        placeholder.loadingState = LoadingState(title: title, detail: detail, fraction: 0, showsProgress: false)
+        append(placeholder)
+        scrollToStart()
+    }
+
     func showLoading(after column: Int, title: String, detail: String, fraction: Double) {
         trim(after: column)
         let loading = FileColumnController(url: nil, items: [])
-        loading.loadingState = LoadingState(title: title, detail: detail, fraction: fraction)
+        loading.loadingState = LoadingState(title: title, detail: detail, fraction: fraction, showsProgress: true)
+        loading.onCancel = { [weak self] in self?.onCancelScan?() }
         append(loading)
+        scrollToEnd()
     }
 
     func updateLoading(after column: Int, progress: ScanProgress) {
         let loadingIndex = column + 1
         guard loadingIndex >= 0, loadingIndex < columns.count else { return }
-        columns[loadingIndex].loadingState = LoadingState(title: progress.title, detail: progress.detail, fraction: progress.fraction)
+        columns[loadingIndex].loadingState = LoadingState(title: progress.title, detail: progress.detail, fraction: progress.fraction, showsProgress: true)
     }
 
     func showError(after column: Int, message: String) {
         let loadingIndex = column + 1
         guard loadingIndex >= 0, loadingIndex < columns.count else { return }
-        columns[loadingIndex].loadingState = LoadingState(title: "Scan failed", detail: message, fraction: 0)
+        columns[loadingIndex].loadingState = LoadingState(title: "Scan failed", detail: message, fraction: 0, showsProgress: false)
+    }
+
+    func showCancelled(after column: Int? = nil) {
+        if let column {
+            let loadingIndex = column + 1
+            guard loadingIndex >= 0, loadingIndex < columns.count else { return }
+            columns[loadingIndex].loadingState = LoadingState(title: "Scan cancelled", detail: "Choose a folder or refresh to scan again.", fraction: 0, showsProgress: false)
+        } else if let last = columns.last, last.loadingState != nil {
+            last.loadingState = LoadingState(title: "Scan cancelled", detail: "Choose a folder or refresh to scan again.", fraction: 0, showsProgress: false)
+        }
     }
 
     func set(items: [FileItem], for url: URL, after column: Int) {
         trim(after: column)
         let controller = FileColumnController(url: url, items: items)
         controller.onSelect = { [weak self, weak controller] item in
+            guard let self, let controller, let index = self.columns.firstIndex(of: controller) else { return }
+            self.onSelectionChanged?(item.url)
+            self.trim(after: index)
+        }
+        controller.onOpen = { [weak self, weak controller] item in
             guard let self, let controller, let index = self.columns.firstIndex(of: controller) else { return }
             self.onSelectionChanged?(item.url)
             if item.canBrowse {
@@ -877,6 +951,8 @@ final class BrowserController: NSObject {
             }
         }
         append(controller)
+        controller.selectFirstItem()
+        controller.focus()
         scrollToEnd()
     }
 
@@ -896,15 +972,17 @@ final class BrowserController: NSObject {
         columns.append(controller)
         controller.onMoveLeft = { [weak self, weak controller] in
             guard let self, let controller, let index = self.columns.firstIndex(of: controller), index > 0 else { return }
+            self.trim(after: index - 1)
             self.columns[index - 1].focus()
         }
         controller.onMoveRight = { [weak controller] in
             guard let item = controller?.selectedItem, item.canBrowse else { return }
-            controller?.onSelect?(item)
+            controller?.onOpen?(item)
         }
-        stack.addArrangedSubview(controller.view)
-        controller.view.widthAnchor.constraint(equalToConstant: 360).isActive = true
-        controller.view.heightAnchor.constraint(equalTo: view.heightAnchor).isActive = true
+        controller.view.translatesAutoresizingMaskIntoConstraints = true
+        controller.view.autoresizingMask = [.height]
+        documentView.addSubview(controller.view)
+        updateDocumentFrame()
     }
 
     private func trim(after column: Int) {
@@ -913,13 +991,42 @@ final class BrowserController: NSObject {
         let removed = columns.suffix(columns.count - keepCount)
         removed.forEach { $0.view.removeFromSuperview() }
         columns.removeLast(columns.count - keepCount)
+        updateDocumentFrame()
+    }
+
+    private func scrollToStart() {
+        updateDocumentFrame()
+        view.contentView.scroll(to: NSPoint(x: 0, y: 0))
+        view.reflectScrolledClipView(view.contentView)
     }
 
     private func scrollToEnd() {
+        updateDocumentFrame()
         view.layoutSubtreeIfNeeded()
-        let maxX = max(0, stack.bounds.width - view.contentView.bounds.width)
+        let maxX = max(0, documentView.bounds.width - view.contentView.bounds.width)
         view.contentView.scroll(to: NSPoint(x: maxX, y: 0))
         view.reflectScrolledClipView(view.contentView)
+    }
+
+    private func updateDocumentFrame() {
+        let visible = view.contentView.bounds.size
+        let width = max(CGFloat(columns.count) * columnWidth, visible.width)
+        let height = max(visible.height, 1)
+        documentView.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        for (index, column) in columns.enumerated() {
+            column.view.frame = NSRect(x: CGFloat(index) * columnWidth, y: 0, width: columnWidth, height: height)
+        }
+    }
+
+    @objc private func contentViewBoundsDidChange() {
+        updateDocumentFrame()
+    }
+}
+
+final class ColumnDocumentView: NSView {
+    override var isFlipped: Bool { true }
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
     }
 }
 
@@ -927,8 +1034,10 @@ final class FileColumnController: NSObject, NSTableViewDataSource, NSTableViewDe
     let view = NSScrollView()
     let url: URL?
     var onSelect: ((FileItem) -> Void)?
+    var onOpen: ((FileItem) -> Void)?
     var onMoveLeft: (() -> Void)?
     var onMoveRight: (() -> Void)?
+    var onCancel: (() -> Void)?
     var selectedItem: FileItem? {
         let row = table.selectedRow
         guard row >= 0, row < items.count else { return nil }
@@ -981,6 +1090,12 @@ final class FileColumnController: NSObject, NSTableViewDataSource, NSTableViewDe
         view.window?.makeFirstResponder(table)
     }
 
+    func selectFirstItem() {
+        guard loadingState == nil, !items.isEmpty else { return }
+        table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
+        table.scrollRowToVisible(0)
+    }
+
     func numberOfRows(in tableView: NSTableView) -> Int {
         loadingState == nil ? items.count : 1
     }
@@ -988,7 +1103,7 @@ final class FileColumnController: NSObject, NSTableViewDataSource, NSTableViewDe
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         if let loadingState {
             let cell = LoadingCell()
-            cell.configure(with: loadingState)
+            cell.configure(with: loadingState, cancelAction: onCancel)
             return cell
         }
         let cell = FileCell()
@@ -997,7 +1112,8 @@ final class FileColumnController: NSObject, NSTableViewDataSource, NSTableViewDe
     }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
-        loadingState == nil ? 24 : 96
+        guard let loadingState else { return 24 }
+        return loadingState.showsProgress ? 96 : 68
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
@@ -1008,7 +1124,7 @@ final class FileColumnController: NSObject, NSTableViewDataSource, NSTableViewDe
     @objc private func openSelected() {
         guard let item = selectedItem else { return }
         if item.canBrowse {
-            onSelect?(item)
+            onOpen?(item)
         } else {
             NSWorkspace.shared.open(item.url)
         }
@@ -1021,20 +1137,22 @@ final class KeyTableView: NSTableView {
     var onReturn: (() -> Void)?
 
     override func keyDown(with event: NSEvent) {
-        guard let scalar = event.charactersIgnoringModifiers?.unicodeScalars.first else {
-            super.keyDown(with: event)
-            return
-        }
-
-        switch Int(scalar.value) {
-        case NSLeftArrowFunctionKey:
+        switch event.keyCode {
+        case 123:
             onLeftArrow?()
-        case NSRightArrowFunctionKey:
+        case 124:
             onRightArrow?()
-        case NSEnterCharacter, NSCarriageReturnCharacter:
-            onReturn?()
         default:
-            super.keyDown(with: event)
+            guard let scalar = event.charactersIgnoringModifiers?.unicodeScalars.first else {
+                super.keyDown(with: event)
+                return
+            }
+            switch Int(scalar.value) {
+            case NSEnterCharacter, NSCarriageReturnCharacter:
+                onReturn?()
+            default:
+                super.keyDown(with: event)
+            }
         }
     }
 }
@@ -1043,6 +1161,8 @@ final class LoadingCell: NSTableCellView {
     private let titleLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(labelWithString: "")
     private let progress = NSProgressIndicator()
+    private let cancelButton = NSButton()
+    private var cancelAction: (() -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1070,27 +1190,46 @@ final class LoadingCell: NSTableCellView {
         progress.maxValue = 1
         progress.controlSize = .small
 
+        cancelButton.translatesAutoresizingMaskIntoConstraints = false
+        cancelButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: nil)
+        cancelButton.bezelStyle = .texturedRounded
+        cancelButton.isBordered = false
+        cancelButton.target = self
+        cancelButton.action = #selector(cancel)
+
         addSubview(titleLabel)
         addSubview(detailLabel)
         addSubview(progress)
+        addSubview(cancelButton)
 
         NSLayoutConstraint.activate([
             titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            titleLabel.trailingAnchor.constraint(equalTo: cancelButton.leadingAnchor, constant: -10),
             titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 14),
             detailLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             detailLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
             detailLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 6),
             progress.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
-            progress.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
-            progress.topAnchor.constraint(equalTo: detailLabel.bottomAnchor, constant: 10)
+            progress.trailingAnchor.constraint(equalTo: cancelButton.leadingAnchor, constant: -10),
+            progress.topAnchor.constraint(equalTo: detailLabel.bottomAnchor, constant: 10),
+            cancelButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            cancelButton.centerYAnchor.constraint(equalTo: progress.centerYAnchor),
+            cancelButton.widthAnchor.constraint(equalToConstant: 24),
+            cancelButton.heightAnchor.constraint(equalToConstant: 24)
         ])
     }
 
-    func configure(with state: LoadingState) {
+    func configure(with state: LoadingState, cancelAction: (() -> Void)?) {
         titleLabel.stringValue = state.title
         detailLabel.stringValue = state.detail
+        progress.isHidden = !state.showsProgress
+        cancelButton.isHidden = !state.showsProgress
+        self.cancelAction = cancelAction
         progress.doubleValue = state.fraction
+    }
+
+    @objc private func cancel() {
+        cancelAction?()
     }
 }
 

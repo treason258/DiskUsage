@@ -5,15 +5,15 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>DiskWave2</string>
+	<string>DiskUsage</string>
 	<key>CFBundleIdentifier</key>
-	<string>ph.barthe.diskwave2.local</string>
+	<string>ph.barthe.diskusage.local</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>DiskWave2</string>
+	<string>DiskUsage</string>
 	<key>CFBundleDisplayName</key>
-	<string>DiskWave2</string>
+	<string>DiskUsage</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -27,18 +27,18 @@
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright 2026 DiskWave2</string>
+	<string>Copyright 2026 DiskUsage</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>DiskWave2 may use Finder integration to reveal selected files.</string>
+	<string>DiskUsage may use Finder integration to reveal selected files.</string>
 	<key>NSDesktopFolderUsageDescription</key>
-	<string>DiskWave2 scans selected folders to calculate disk usage.</string>
+	<string>DiskUsage scans selected folders to calculate disk usage.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
-	<string>DiskWave2 scans selected folders to calculate disk usage.</string>
+	<string>DiskUsage scans selected folders to calculate disk usage.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
-	<string>DiskWave2 scans selected folders to calculate disk usage.</string>
+	<string>DiskUsage scans selected folders to calculate disk usage.</string>
 	<key>NSRemovableVolumesUsageDescription</key>
-	<string>DiskWave2 scans selected volumes to calculate disk usage.</string>
+	<string>DiskUsage scans selected volumes to calculate disk usage.</string>
 	<key>NSNetworkVolumesUsageDescription</key>
-	<string>DiskWave2 scans selected network volumes to calculate disk usage.</string>
+	<string>DiskUsage scans selected network volumes to calculate disk usage.</string>
 </dict>
 </plist>

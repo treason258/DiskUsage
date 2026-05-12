@@ -1,14 +1,14 @@
-# DiskWave2
+# DiskUsage
 
-DiskWave2 is a native macOS disk usage browser inspired by the original DiskWave. It scans folders and volumes, calculates allocated disk size recursively, and presents the results in Finder-style columns for fast keyboard navigation.
+DiskUsage is a native macOS disk usage browser inspired by the original DiskWave. It scans folders and volumes, calculates allocated disk size recursively, and presents the results in Finder-style columns for fast keyboard navigation.
 
 ## Run
 
 ```sh
-swift run DiskWave2
+swift run DiskUsage
 ```
 
-You can also open `Package.swift` in Xcode and run the `DiskWave2` executable target.
+You can also open `Package.swift` in Xcode and run the `DiskUsage` executable target.
 
 ## Current Features
 
@@ -26,4 +26,4 @@ macOS may block access to protected folders such as Desktop, Documents, external
 
 System Settings -> Privacy & Security -> Full Disk Access
 
-When running from Xcode or SwiftPM during development, grant access to Xcode, Terminal, or the app host you use to launch DiskWave2.
+When running from Xcode or SwiftPM during development, grant access to Xcode, Terminal, or the app host you use to launch DiskUsage.

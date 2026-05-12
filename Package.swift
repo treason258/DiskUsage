@@ -3,16 +3,16 @@
 import PackageDescription
 
 let package = Package(
-    name: "DiskWave2",
+    name: "DiskUsage",
     platforms: [
         .macOS(.v13)
     ],
     products: [
-        .executable(name: "DiskWave2", targets: ["DiskWave2"])
+        .executable(name: "DiskUsage", targets: ["DiskUsage"])
     ],
     targets: [
         .executableTarget(
-            name: "DiskWave2",
+            name: "DiskUsage",
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("QuickLookUI")
