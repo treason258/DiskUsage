@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>DiskWave2</string>
+	<key>CFBundleIdentifier</key>
+	<string>ph.barthe.diskwave2.local</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>DiskWave2</string>
+	<key>CFBundleDisplayName</key>
+	<string>DiskWave2</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright 2026 DiskWave2</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>DiskWave2 may use Finder integration to reveal selected files.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>DiskWave2 scans selected folders to calculate disk usage.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>DiskWave2 scans selected folders to calculate disk usage.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>DiskWave2 scans selected folders to calculate disk usage.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>DiskWave2 scans selected volumes to calculate disk usage.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>DiskWave2 scans selected network volumes to calculate disk usage.</string>
+</dict>
+</plist>
