@@ -6,7 +6,12 @@
 
 ---
 
-## 中文
+<table width="100%">
+  <tr>
+    <td><h2 id="中文">中文</h2></td>
+    <td align="right"><a href="#中文">中文</a> | <a href="#english">English</a></td>
+  </tr>
+</table>
 
 DiskUsage 是一个原生 macOS 磁盘占用浏览器，灵感来自经典的 DiskWave。它面向需要快速定位大文件、大文件夹和异常占用空间的用户：选择一个磁盘、文件夹或常用位置后，DiskUsage 会递归统计已分配磁盘空间，并用类似 Finder 栏目视图的方式展示结果。
 
@@ -76,7 +81,12 @@ System Settings -> Privacy & Security -> Full Disk Access
 
 ---
 
-## English
+<table width="100%">
+  <tr>
+    <td><h2 id="english">English</h2></td>
+    <td align="right"><a href="#中文">中文</a> | <a href="#english">English</a></td>
+  </tr>
+</table>
 
 DiskUsage is a native macOS disk usage browser inspired by the classic DiskWave app. It is built for quickly finding large files, large folders, and unexpected storage usage. After you choose a volume, folder, or common location, DiskUsage recursively measures allocated disk size and presents the result in Finder-style columns.
 
